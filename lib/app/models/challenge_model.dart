@@ -124,7 +124,7 @@ class MyChallengeScreen extends StatelessWidget {
     final challenges = challengeService.getChallengesStream();
 
     updateChallengesProgress(
-      challenges,
+      challenges as List<ChallengeModel>,
       stepService.steps,
       challengeService,
     );
