@@ -3,100 +3,88 @@ import 'package:provider/provider.dart';
 import 'package:qadam_app/app/services/step_counter_service.dart'
     as step_service;
 import 'package:qadam_app/app/services/challenge_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // Challenge model
 class ChallengeModel {
   final String id;
   final String title;
   final String description;
-  final int reward;
   final int targetSteps;
-  final int duration;
-  final String type;
-  final DateTime? startDate;
-  final DateTime? endDate;
+  final int rewardCoins;
+  final String type; // daily, weekly, monthly
   final double progress;
+  final int currentSteps;
+  final bool isActive;
   final bool isCompleted;
   final bool rewardClaimed;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final DateTime? completedDate;
+  final int priority;
+  final String? iconUrl;
 
   ChallengeModel({
     required this.id,
     required this.title,
     required this.description,
-    required this.reward,
     required this.targetSteps,
-    required this.duration,
+    required this.rewardCoins,
     required this.type,
-    this.startDate,
-    this.endDate,
-    this.progress = 0,
+    this.progress = 0.0,
+    this.currentSteps = 0,
+    this.isActive = true,
     this.isCompleted = false,
     this.rewardClaimed = false,
+    this.startDate,
+    this.endDate,
+    this.completedDate,
+    this.priority = 0,
+    this.iconUrl,
   });
 
-  ChallengeModel copyWith({
-    double? progress,
-    bool? isCompleted,
-    bool? rewardClaimed,
-  }) {
+  factory ChallengeModel.fromFirestore(DocumentSnapshot doc) {
+    final data = doc.data() as Map<String, dynamic>;
     return ChallengeModel(
-      id: id,
-      title: title,
-      description: description,
-      reward: reward,
-      targetSteps: targetSteps,
-      duration: duration,
-      type: type,
-      startDate: startDate,
-      endDate: endDate,
-      progress: progress ?? this.progress,
-      isCompleted: isCompleted ?? this.isCompleted,
-      rewardClaimed: rewardClaimed ?? this.rewardClaimed,
+      id: doc.id,
+      title: data['title'] ?? '',
+      description: data['description'] ?? '',
+      targetSteps: data['targetSteps'] ?? 0,
+      rewardCoins: data['rewardCoins'] ?? 0,
+      type: data['type'] ?? 'daily',
+      progress: (data['progress'] ?? 0.0).toDouble(),
+      currentSteps: data['currentSteps'] ?? 0,
+      isActive: data['isActive'] ?? true,
+      isCompleted: data['isCompleted'] ?? false,
+      rewardClaimed: data['rewardClaimed'] ?? false,
+      startDate: data['startDate']?.toDate(),
+      endDate: data['endDate']?.toDate(),
+      completedDate: data['completedDate']?.toDate(),
+      priority: data['priority'] ?? 0,
+      iconUrl: data['iconUrl'],
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
-      "id": id,
-      "title": title,
-      "description": description,
-      "reward": reward,
-      "targetSteps": targetSteps,
-      "duration": duration,
-      "type": type,
-      "startDate": startDate,
-      "endDate": endDate,
-      "progress": progress,
-      "isCompleted": isCompleted,
-      "rewardClaimed": rewardClaimed,
+      'id': id,
+      'title': title,
+      'description': description,
+      'targetSteps': targetSteps,
+      'rewardCoins': rewardCoins,
+      'type': type,
+      'progress': progress,
+      'currentSteps': currentSteps,
+      'isActive': isActive,
+      'isCompleted': isCompleted,
+      'rewardClaimed': rewardClaimed,
+      'startDate': startDate,
+      'endDate': endDate,
+      'completedDate': completedDate,
+      'priority': priority,
+      'iconUrl': iconUrl,
     };
-  }
-
-  factory ChallengeModel.fromMap(Map<String, dynamic> map) {
-    return ChallengeModel(
-      id: map['id']?.toString() ?? '',
-      title: map['title']?.toString() ?? '',
-      description: map['description']?.toString() ?? '',
-      reward: int.tryParse(map['reward']?.toString() ?? '0') ?? 0,
-      targetSteps: int.tryParse(map['targetSteps']?.toString() ?? '0') ?? 0,
-      duration: int.tryParse(map['duration']?.toString() ?? '1') ?? 1,
-      type: map['type']?.toString() ?? 'daily',
-      startDate: map['startDate'] != null
-          ? DateTime.tryParse(map['startDate'].toString())
-          : null,
-      endDate: map['endDate'] != null
-          ? DateTime.tryParse(map['endDate'].toString())
-          : null,
-      isCompleted: map['isCompleted'] is bool
-          ? map['isCompleted']
-          : (map['isCompleted'] == 1),
-      rewardClaimed: map['rewardClaimed'] is bool
-          ? map['rewardClaimed']
-          : (map['rewardClaimed'] == 1),
-      progress: (map['progress'] is num)
-          ? (map['progress'] as num).toDouble()
-          : double.tryParse(map['progress']?.toString() ?? '0.0') ?? 0.0,
-    );
   }
 }
 
@@ -107,45 +95,74 @@ void updateChallengesProgress(List<ChallengeModel> challenges, int currentSteps,
     if (!challenge.isCompleted && challenge.progress < 1.0) {
       final progress = (currentSteps / challenge.targetSteps).clamp(0.0, 1.0);
       if (progress != challenge.progress) {
-        service.updateChallengeProgress(challenge.id, progress);
+        service.updateChallengeProgress(challenge.id, currentSteps.toDouble());
       }
     }
   }
 }
 
-// Main App Widget
+// Main App Widget - FIXED VERSION
 class MyChallengeScreen extends StatelessWidget {
   const MyChallengeScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final stepService = Provider.of<step_service.StepCounterService>(context);
-    final challengeService = Provider.of<ChallengeService>(context);
-    final challenges = challengeService.getChallengesStream();
-
-    updateChallengesProgress(
-      challenges,
-      stepService.steps,
-      challengeService,
-    );
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Challenges'),
+        backgroundColor: Colors.blue[600],
       ),
-      body: ListView.builder(
-        itemCount: challenges.length,
-        itemBuilder: (context, index) {
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('user_challenges')
+            .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-          final challenge = challenges[index];
-          return ListTile(
-            title: Text(challenge.title),
-            subtitle: Text(
-              '${(challenge.progress * 100).toStringAsFixed(1)}% completed',
-            ),
-            trailing: challenge.isCompleted
-                ? const Icon(Icons.check_circle, color: Colors.green)
-                : null,
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('No challenges found'));
+          }
+
+          return ListView.builder(
+            itemCount: snapshot.data!.docs.length,
+            itemBuilder: (context, index) {
+              final challengeDoc = snapshot.data!.docs[index];
+              final challengeData = challengeDoc.data() as Map<String, dynamic>;
+              final challengeId = challengeDoc.id;
+
+              final progress = (challengeData['progress'] ?? 0.0).toDouble();
+              final isCompleted = challengeData['isCompleted'] ?? false;
+
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: isCompleted ? Colors.green : Colors.blue,
+                    child: Icon(
+                      isCompleted ? Icons.check : Icons.flag,
+                      color: Colors.white,
+                    ),
+                  ),
+                  title: Text(challengeData['title'] ?? 'Challenge'),
+                  subtitle: Text(
+                    '${(progress * 100).toStringAsFixed(1)}% completed',
+                  ),
+                  trailing: isCompleted
+                      ? const Icon(Icons.check_circle, color: Colors.green)
+                      : Icon(Icons.play_arrow, color: Colors.blue[600]),
+                  onTap: () {
+                    debugPrint('Challenge tapped: $challengeId');
+                  },
+                ),
+              );
+            },
           );
         },
       ),

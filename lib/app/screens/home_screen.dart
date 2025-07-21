@@ -1,28 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:provider/provider.dart';
-import 'package:qadam_app/app/screens/splash_screen.dart';
-import 'package:qadam_app/app/services/step_counter_service.dart'
-    as step_service;
+import 'package:qadam_app/app/services/step_counter_service.dart';
 import 'package:qadam_app/app/services/coin_service.dart';
-import 'package:qadam_app/app/screens/coin_wallet_screen.dart';
-import 'package:qadam_app/app/screens/challenge_screen.dart';
-import 'package:qadam_app/app/screens/statistics_screen.dart';
-import 'package:qadam_app/app/screens/referral_screen.dart';
-import 'package:qadam_app/app/screens/profile_screen.dart';
-import 'package:qadam_app/app/screens/settings_screen.dart';
-import 'package:qadam_app/app/screens/ranking_screen.dart';
-import 'package:qadam_app/app/screens/transaction_history_screen.dart';
-import 'package:qadam_app/app/components/step_progress_card.dart';
-import 'package:qadam_app/app/components/challenge_banner.dart';
-import 'package:qadam_app/app/screens/notification_screen.dart';
-import 'package:qadam_app/app/screens/login_streak_screen.dart';
-import 'package:qadam_app/app/screens/support_history_screen.dart';
-import 'package:qadam_app/app/models/challenge_model.dart';
 import 'package:qadam_app/app/services/challenge_service.dart';
-
-import '../ad_helper.dart';
-import '../services/auth_service.dart';
+import 'package:lottie/lottie.dart';
+import 'package:fl_chart/fl_chart.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -31,627 +13,556 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  BannerAd? _bannerAd;
-  InterstitialAd? _interstitialAd;
-
-  // COMPLETE: Add _rewardedAd
-  RewardedAd? _rewardedAd;
-  DateTime? _lastBonusShownDate;
-  bool _isCounting = true;
+class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+  late AnimationController _stepAnimationController;
+  late AnimationController _coinAnimationController;
 
   @override
   void initState() {
     super.initState();
-    // Use addPostFrameCallback to avoid the setState during build error
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Start step counting service
-      final stepService =
-          Provider.of<step_service.StepCounterService>(context, listen: false);
-      stepService.startCounting();
-
-      BannerAd(
-        adUnitId: AdHelper.bannerAdUnitId,
-        request: const AdRequest(),
-        size: AdSize.banner,
-        listener: BannerAdListener(
-          onAdLoaded: (ad) {
-            setState(() {
-              _bannerAd = ad as BannerAd;
-            });
-          },
-          onAdFailedToLoad: (ad, err) {
-            debugPrint('Failed to load a banner ad: ${err.message}');
-            ad.dispose();
-          },
-        ),
-      ).load();
-
-      // COMPLETE: Load a rewarded Ad
-
-      // _loadRewardedAd();
-
-      // Bonus xabarini ko'rsatish
-      final coinService = Provider.of<CoinService>(context, listen: false);
-      final now = DateTime.now();
-      if (coinService.lastBonusAmount != null &&
-          coinService.lastBonusDate != null) {
-        if (_lastBonusShownDate == null ||
-            now.year != _lastBonusShownDate!.year ||
-            now.month != _lastBonusShownDate!.month ||
-            now.day != _lastBonusShownDate!.day) {
-          if (now.year == coinService.lastBonusDate!.year &&
-              now.month == coinService.lastBonusDate!.month &&
-              now.day == coinService.lastBonusDate!.day) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: Text(
-                      'Kundalik bonus: ${coinService.lastBonusAmount} tanga!')),
-            );
-            _lastBonusShownDate = now;
-          }
-        }
-      }
-    });
+    _stepAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _coinAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
   }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final coinService = Provider.of<CoinService>(context);
-    if (coinService.showBonusSnackbar && coinService.lastBonusAmount != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Text('Kundalik bonus: ${coinService.lastBonusAmount} tanga! '),
-                const Text('😄'),
-              ],
-            ),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-        coinService.clearBonusSnackbar();
-      });
-    }
-  }
-
-  final GlobalKey<ScaffoldState> _key = GlobalKey(); // Create a key
 
   @override
   Widget build(BuildContext context) {
-    final stepService = Provider.of<step_service.StepCounterService>(context);
-    final coinService = Provider.of<CoinService>(context);
-    final authService = Provider.of<AuthService>(context);
-
     return Scaffold(
-      key: _key,
-      drawer: Drawer(
-        child: Column(
-          children: [
-            DrawerHeader(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Theme.of(context).primaryColor,
-                    Theme.of(context).primaryColor.withOpacity(0.8),
-                  ],
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 35,
-                    backgroundColor: Colors.white,
-                    backgroundImage: authService.user?.photoURL != null
-                        ? NetworkImage(authService.user!.photoURL!)
-                        : null,
-                    child: authService.user?.photoURL == null
-                        ? const Icon(
-                            Icons.person,
-                            color: Colors.grey,
-                            size: 33,
-                          )
-                        : null,
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          authService.user?.displayName ?? "User",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          authService.user?.email ?? "",
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 14,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.zero,
-                children: [
-                  _buildDrawerTile(
-                    context,
-                    icon: Icons.home_outlined,
-                    label: 'Asosiy',
-                    onTap: () => Navigator.pop(context),
-                  ),
-                  _buildDrawerTile(
-                    context,
-                    icon: Icons.person_outline,
-                    label: 'Profil',
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ProfileScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildDrawerTile(
-                    context,
-                    icon: Icons.settings_outlined,
-                    label: 'Sozlamalar',
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const SettingsScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildDrawerTile(
-                    context,
-                    icon: Icons.leaderboard,
-                    label: 'Reyting',
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const RankingScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _buildDrawerTile(
-                    context,
-                    icon: Icons.history,
-                    label: 'Tranzaksiya tarixi',
-                    onTap: () {
-                      Navigator.pop(context);
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const TransactionHistoryScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  const Divider(),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16.0, left: 16, right: 16),
-              child: _buildDrawerTile(
-                context,
-                icon: Icons.logout,
-                label: 'Chiqish',
-                color: Colors.red,
-                onTap: () {
-                  authService.signOut();
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (context) => SplashScreen()));
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-      backgroundColor: Theme.of(context).colorScheme.background,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: InkWell(
-            onTap: () {
-              stepService.addSteps(100);
-            },
-            child: const Text('Qadam++')),
-        backgroundColor: Theme.of(context).primaryColor,
-        elevation: 0,
-        leading: IconButton(
-            onPressed: () {
-              _key.currentState?.openDrawer();
-            },
-            icon: const Icon(
-              Icons.menu,
-            )),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const NotificationScreen(),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFF8F9FA),
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // User greeting
-
-              if (_bannerAd != null)
-                Align(
-                  alignment: Alignment.topCenter,
-                  child: Container(
-                    width: _bannerAd!.size.width.toDouble(),
-                    height: _bannerAd!.size.height.toDouble(),
-                    child: AdWidget(ad: _bannerAd!),
-                  ),
-                ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                color: Theme.of(context).primaryColor,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Salom, ${authService.user?.displayName?.isNotEmpty == true ? authService.user!.displayName : (authService.user?.email ?? 'Foydalanuvchi')}!',
-                          style:
-                              Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          'Bugun sog\'lom qadamlar',
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Colors.white,
-                                  ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.monetization_on,
-                            color: Color(0xFFFFC107),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 5),
-                          Text(
-                            '${coinService.coins}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Step counter card
-              Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: StepProgressCard(
-                  steps: stepService.steps,
-                  goal: stepService.dailyGoal,
-                  coins: coinService.todayEarned,
-                ),
-              ),
-
-              // Challenge banner
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20.0),
-                child: ChallengeBanner(),
-              ),
-
-              const SizedBox(height: 20),
-
-              // Options grid
-              Padding(
-                padding: const EdgeInsets.all(20.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Qo\'shimcha imkoniyatlar',
-                      style:
-                          Theme.of(context).textTheme.displayMedium?.copyWith(
-                                fontSize: 18,
-                              ),
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildFeatureButton(
-                            context,
-                            icon: Icons.monetization_on,
-                            label: 'Hamyon',
-                            color: const Color(0xFFFFC107),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const CoinWalletScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: _buildFeatureButton(
-                            context,
-                            icon: Icons.analytics,
-                            label: 'Statistika',
-                            color: const Color(0xFF2196F3),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const StatisticsScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildFeatureButton(
-                            context,
-                            icon: Icons.flag,
-                            label: 'Challenge',
-                            color: const Color(0xFFE91E63),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ChallengeScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: _buildFeatureButton(
-                            context,
-                            icon: Icons.people,
-                            label: 'Referal',
-                            color: const Color(0xFF673AB7),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const ReferralScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildFeatureButton(
-                            context,
-                            icon: Icons.whatshot,
-                            label: 'Login Streak',
-                            color: const Color(0xFF00BFA5),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const LoginStreakScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: _buildFeatureButton(
-                            context,
-                            icon: Icons.leaderboard,
-                            label: 'Reyting',
-                            color: const Color(0xFF4CAF50),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const RankingScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: _buildFeatureButton(
-                            context,
-                            icon: Icons.history,
-                            label: 'Tranzaksiya',
-                            color: const Color(0xFF607D8B),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      const TransactionHistoryScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 15),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildFeatureButton(
-                            context,
-                            icon: Icons.support_agent,
-                            label: 'Murojaatlar',
-                            color: const Color(0xFF1976D2),
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const SupportHistoryScreen(),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFeatureButton(
-    BuildContext context, {
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.2),
-              spreadRadius: 1,
-              blurRadius: 5,
-              offset: const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icon,
-                size: 30,
-                color: color,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodyLarge,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerTile(BuildContext context,
-      {required IconData icon,
-      required String label,
-      required VoidCallback onTap,
-      Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: Colors.grey[50],
-            ),
-            child: Row(
+        child: RefreshIndicator(
+          onRefresh: _refreshData,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(icon, color: color ?? Theme.of(context).primaryColor),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: color ?? Colors.black87,
-                    ),
-                  ),
-                ),
-                const Icon(Icons.arrow_forward_ios,
-                    size: 16, color: Colors.grey),
+                _buildHeader(),
+                const SizedBox(height: 20),
+                _buildStepCounter(),
+                const SizedBox(height: 20),
+                _buildCoinBalance(),
+                const SizedBox(height: 20),
+                _buildDailyProgress(),
+                const SizedBox(height: 20),
+                _buildActiveChallenges(),
+                const SizedBox(height: 20),
+                _buildQuickActions(),
               ],
             ),
           ),
         ),
       ),
     );
+  }
+
+  Widget _buildHeader() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Salom!',
+              style: TextStyle(
+                fontSize: 16,
+                color: Colors.grey[600],
+              ),
+            ),
+            const Text(
+              'Bugun necha qadam?',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2E3A59),
+              ),
+            ),
+          ],
+        ),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.notifications_outlined,
+            color: Color(0xFF2E3A59),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepCounter() {
+    return Consumer<StepCounterService>(
+      builder: (context, stepService, child) {
+        final steps = stepService.steps;
+        final dailyGoal = stepService.dailyGoal;
+        final progress = steps / dailyGoal;
+
+        return Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF667EEA), Color(0xFF764BA2)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF667EEA).withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Bugungi Qadamlar',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${(progress * 100).toInt()}%',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        AnimatedBuilder(
+                          animation: _stepAnimationController,
+                          builder: (context, child) {
+                            return Text(
+                              '${(steps * _stepAnimationController.value).toInt()}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 36,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            );
+                          },
+                        ),
+                        Text(
+                          'Maqsad: ${dailyGoal.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 80,
+                    height: 80,
+                    child: CircularProgressIndicator(
+                      value: progress.clamp(0.0, 1.0),
+                      strokeWidth: 8,
+                      backgroundColor: Colors.white.withOpacity(0.3),
+                      valueColor:
+                          const AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildCoinBalance() {
+    return Consumer<CoinService>(
+      builder: (context, coinService, child) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3CD),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.monetization_on,
+                  color: Color(0xFFFFB020),
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Tanga Balansi',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    AnimatedBuilder(
+                      animation: _coinAnimationController,
+                      builder: (context, child) {
+                        return Text(
+                          '${(coinService.totalCoins * _coinAnimationController.value).toInt()}',
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF2E3A59),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Bugun: ${coinService.todayEarned}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    'Qolgan: ${coinService.remainingDailyLimit}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF28A745),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildDailyProgress() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Haftalik Progress',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF2E3A59),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 200,
+            child: Consumer<StepCounterService>(
+              builder: (context, stepService, child) {
+                return LineChart(
+                  LineChartData(
+                    gridData: FlGridData(show: false),
+                    titlesData: FlTitlesData(show: false),
+                    borderData: FlBorderData(show: false),
+                    lineBarsData: [
+                      LineChartBarData(
+                        spots: _generateWeeklyData(stepService),
+                        isCurved: true,
+                        color: const Color(0xFF667EEA),
+                        barWidth: 3,
+                        dotData: FlDotData(show: true),
+                        belowBarData: BarAreaData(
+                          show: true,
+                          color: const Color(0xFF667EEA).withOpacity(0.1),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveChallenges() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Faol Challenge\'lar',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF2E3A59),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pushNamed(context, '/challenges'),
+              child: const Text('Barchasini ko\'rish'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Consumer<ChallengeService>(
+          builder: (context, challengeService, child) {
+            return SizedBox(
+              height: 120,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: challengeService.activeChallenges.length,
+                itemBuilder: (context, index) {
+                  final challenge = challengeService.activeChallenges[index];
+                  return Container(
+                    width: 200,
+                    margin: const EdgeInsets.only(right: 12),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          challenge.title,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 8),
+                        LinearProgressIndicator(
+                          value: challenge.progress,
+                          backgroundColor: Colors.grey.shade200,
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            Color(0xFF28A745),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${(challenge.progress * 100).toInt()}% tugallangan',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildQuickActions() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Tezkor Harakatlar',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF2E3A59),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                'Challenge\'lar',
+                Icons.flag,
+                const Color(0xFF28A745),
+                () => Navigator.pushNamed(context, '/challenges'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionCard(
+                'Reyting',
+                Icons.leaderboard,
+                const Color(0xFF17A2B8),
+                () => Navigator.pushNamed(context, '/leaderboard'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                'Do\'kon',
+                Icons.shopping_cart,
+                const Color(0xFFFFB020),
+                () => Navigator.pushNamed(context, '/shop'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionCard(
+                'Do\'stlarni taklif',
+                Icons.share,
+                const Color(0xFF6F42C1),
+                () => Navigator.pushNamed(context, '/invite'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionCard(
+      String title, IconData icon, Color color, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: Color(0xFF2E3A59),
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<FlSpot> _generateWeeklyData(StepCounterService stepService) {
+    // Haftalik ma'lumotlarni generate qilish
+    return List.generate(7, (index) {
+      return FlSpot(
+          index.toDouble(), (stepService.steps * (0.7 + (index * 0.05))));
+    });
+  }
+
+  Future<void> _refreshData() async {
+    final stepService = Provider.of<StepCounterService>(context, listen: false);
+    final coinService = Provider.of<CoinService>(context, listen: false);
+
+    await Future.wait([
+      stepService.syncStepsWithFirestore(),
+      coinService.calculateCoinsFromSteps(stepService.steps),
+    ]);
+
+    _stepAnimationController.forward();
+    _coinAnimationController.forward();
+  }
+
+  @override
+  void dispose() {
+    _stepAnimationController.dispose();
+    _coinAnimationController.dispose();
+    super.dispose();
   }
 }

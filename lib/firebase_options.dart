@@ -47,8 +47,8 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAIzpvSRiYrh22syXrxV4EqoYbGBfQVsBM',
-    appId: '1:500896448263:web:8a78ebcb8b343f04268fa2',
+    apiKey: String.fromEnvironment('FIREBASE_WEB_API_KEY'),
+    appId: String.fromEnvironment('FIREBASE_WEB_APP_ID'),
     messagingSenderId: '500896448263',
     projectId: 'qadam-app',
     authDomain: 'qadam-app.firebaseapp.com',

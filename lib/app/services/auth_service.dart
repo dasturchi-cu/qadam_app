@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -15,10 +16,13 @@ class AuthService extends ChangeNotifier {
       'profile',
     ],
   );
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   User? _user;
   bool _isLoading = false;
   String? _errorMessage;
 
+  // Getters
   User? get user => _user;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -27,188 +31,143 @@ class AuthService extends ChangeNotifier {
   AuthService() {
     _auth.authStateChanges().listen((User? user) {
       _user = user;
-
       notifyListeners();
     });
   }
 
   // Email va parol bilan ro'yxatdan o'tish
-  Future<bool> signUpWithEmail(String email, String password, String username,
-      {String? referralCode}) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  Future<bool> registerWithEmail(
+      String email, String password, String name) async {
+    _setLoading(true);
 
     try {
-      UserCredential result = await _auth.createUserWithEmailAndPassword(
-          email: email, password: password);
+      final UserCredential result = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-      // Username saqlash
-      await result.user?.updateDisplayName(username);
-
-      // Profil yangilash uchun reload qilish
-      await result.user?.reload();
-      _user = _auth.currentUser;
-
-      // User ma'lumotlarini localStorage ga saqlash
-      await _saveUserData(result.user);
-
-      // FCM tokenni Firestore'ga saqlash
       if (result.user != null) {
-        await saveFcmTokenToFirestore(result.user!.uid);
-
-        // Referral code bo'lsa, referral tizimini ishlatish
-        if (referralCode != null && referralCode.isNotEmpty) {
-          await _processReferral(result.user!.uid, referralCode);
-        }
+        await result.user!.updateDisplayName(name);
+        await _createUserDocument(result.user!, name);
+        _clearError();
+        return true;
       }
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
+      return false;
     } on FirebaseAuthException catch (e) {
-      _isLoading = false;
-
-      if (e.code == 'weak-password') {
-        _errorMessage = 'Parol juda oson';
-      } else if (e.code == 'email-already-in-use') {
-        _errorMessage = 'Bu email allaqachon ro\'yxatdan o\'tkazilgan';
-      } else {
-        _errorMessage = e.message;
-      }
-
-      notifyListeners();
+      _setError(_getAuthErrorMessage(e.code));
       return false;
     } catch (e) {
-      _isLoading = false;
-      _errorMessage = e.toString();
-      notifyListeners();
+      _setError('Ro\'yxatdan o\'tishda xatolik: $e');
       return false;
-    }
-  }
-
-  // Referral code ni qayta ishlash
-  Future<void> _processReferral(String newUserId, String referralCode) async {
-    try {
-      final referralService = ReferralService();
-
-      // Referral code dan foydalanuvchi ID ni olish
-      final referrerId =
-          await referralService.getUserIdFromReferralCode(referralCode);
-
-      if (referrerId != null) {
-        // Referral qo'shish
-        final success =
-            await referralService.addReferral(referrerId, newUserId);
-
-        if (success) {
-          print(
-              'Referral muvaffaqiyatli qo\'shildi: $referrerId -> $newUserId');
-        } else {
-          print('Referral qo\'shishda xatolik: ${referralService.error}');
-        }
-      }
-    } catch (e) {
-      print('Referral qayta ishlashda xatolik: $e');
+    } finally {
+      _setLoading(false);
     }
   }
 
   // Email va parol bilan kirish
   Future<bool> signInWithEmail(String email, String password) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+    _setLoading(true);
 
     try {
-      UserCredential result = await _auth.signInWithEmailAndPassword(
-          email: email, password: password);
+      final UserCredential result = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
-      // User ma'lumotlarini localStorage ga saqlash
-      await _saveUserData(result.user);
-      // FCM tokenni Firestore'ga saqlash
       if (result.user != null) {
-        await saveFcmTokenToFirestore(result.user!.uid);
+        await _updateLastLogin(result.user!);
+        _clearError();
+        return true;
       }
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
+      return false;
     } on FirebaseAuthException catch (e) {
-      _isLoading = false;
-
-      if (e.code == 'user-not-found') {
-        _errorMessage = 'Bu email topilmadi';
-      } else if (e.code == 'wrong-password') {
-        _errorMessage = 'Noto\'g\'ri parol';
-      } else {
-        _errorMessage = e.message;
-      }
-
-      notifyListeners();
+      _setError(_getAuthErrorMessage(e.code));
       return false;
     } catch (e) {
-      _isLoading = false;
-      _errorMessage = e.toString();
-      notifyListeners();
+      _setError('Kirishda xatolik: $e');
       return false;
+    } finally {
+      _setLoading(false);
     }
   }
 
   // Google bilan kirish
   Future<bool> signInWithGoogle() async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+    _setLoading(true);
 
     try {
-      // Google Sign-In dialog ochish
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-
       if (googleUser == null) {
-        // User Google Sign-In ni bekor qildi
-        _isLoading = false;
-        notifyListeners();
+        _setLoading(false);
         return false;
       }
 
-      // Google Sign-In authentication
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-
-      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
-        _isLoading = false;
-        _errorMessage = "Google authentication tokenlari olinmadi";
-        print("Google auth failed: Missing tokens");
-        notifyListeners();
-        return false;
-      }
-
-      // Firebase ga kirish uchun credential olish
-      final OAuthCredential credential = GoogleAuthProvider.credential(
+      final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      // Credential bilan Firebase ga kirish
-      UserCredential result = await _auth.signInWithCredential(credential);
+      final UserCredential result =
+          await _auth.signInWithCredential(credential);
 
-      // User ma'lumotlarini localStorage ga saqlash
-      await _saveUserData(result.user);
-
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } on FirebaseAuthException catch (e) {
-      _isLoading = false;
-      _errorMessage = "Firebase auth xato: ${e.message}";
-      print("Firebase auth error: ${e.code} - ${e.message}");
-      notifyListeners();
+      if (result.user != null) {
+        await _createUserDocument(
+            result.user!, result.user!.displayName ?? 'Foydalanuvchi');
+        await _updateLastLogin(result.user!);
+        _clearError();
+        return true;
+      }
       return false;
     } catch (e) {
-      _isLoading = false;
-      _errorMessage = e.toString();
-      print("Google sign in error: $_errorMessage");
-      notifyListeners();
+      _setError('Google bilan kirishda xatolik: $e');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  // Parolni tiklash
+  Future<bool> resetPassword(String email) async {
+    _setLoading(true);
+
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+      _clearError();
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _setError(_getAuthErrorMessage(e.code));
+      return false;
+    } catch (e) {
+      _setError('Parol tiklashda xatolik: $e');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  //Signupwith email
+
+  Future<bool> signUpWithEmail(String email, String password, String username,
+      {String? referralCode}) async {
+    _setLoading(true);
+
+    try {
+      final UserCredential result = await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      if (result.user != null) {
+        await result.user!.updateDisplayName(username);
+        await _createUserDocument(result.user!, username);
+      }
+
+      return true;
+    } catch (e) {
+      print(e);
+
       return false;
     }
   }
@@ -216,113 +175,95 @@ class AuthService extends ChangeNotifier {
   // Chiqish
   Future<void> signOut() async {
     try {
-      // Google sign out
       await _googleSignIn.signOut();
-      // Firebase sign out
       await _auth.signOut();
-
-      // Local storage dan o'chirish
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.remove('user_id');
-      await prefs.remove('user_email');
-      await prefs.remove('user_name');
+      _clearError();
     } catch (e) {
-      _errorMessage = e.toString();
-      notifyListeners();
+      _setError('Chiqishda xatolik: $e');
     }
   }
 
-  // Parolni tiklash
-  Future<bool> resetPassword(String email) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
+  // Foydalanuvchi hujjatini yaratish
+  Future<void> _createUserDocument(User user, String name) async {
+    final userDoc = _firestore.collection('users').doc(user.uid);
+    final docSnapshot = await userDoc.get();
 
-    try {
-      await _auth.sendPasswordResetEmail(email: email);
-      _isLoading = false;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _isLoading = false;
-      _errorMessage = e.toString();
-      notifyListeners();
-      return false;
-    }
-  }
-
-  // User ma'lumotlarini localStorage ga saqlash
-  Future<void> _saveUserData(User? user) async {
-    if (user != null) {
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user_id', user.uid);
-      await prefs.setString('user_email', user.email ?? '');
-      await prefs.setString('user_name', user.displayName ?? '');
-
-      // await prefs.setString("user", jsonEncode(user.))
-      // FireStoredan users tablega xozirgi userdi qoshish
-
-      await FirebaseFirestore.instance.collection("users").doc(user.uid).set({
+    if (!docSnapshot.exists) {
+      await userDoc.set({
         'uid': user.uid,
+        'name': name,
         'email': user.email,
-        'name': user.displayName,
-        'created_at': FieldValue.serverTimestamp(),
+        'photoURL': user.photoURL,
         'coins': 0,
-        'phone': user.phoneNumber
+        'totalSteps': 0,
+        'dailyGoal': 10000,
+        'level': 1,
+        'experience': 0,
+        'joinDate': FieldValue.serverTimestamp(),
+        'lastLogin': FieldValue.serverTimestamp(),
+        'isActive': true,
+        'settings': {
+          'notifications': true,
+          'soundEnabled': true,
+          'vibrationEnabled': true,
+        },
+      });
+
+      // Statistika subcollection yaratish
+      await userDoc.collection('stats').doc('daily').set({
+        'date': FieldValue.serverTimestamp(),
+        'steps': 0,
+        'distance': 0.0,
+        'calories': 0,
+        'activeTime': 0,
       });
     }
   }
 
-  Future<String> getUsername() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-
-    return prefs.getString("user_name") ?? "";
+  // Oxirgi kirish vaqtini yangilash
+  Future<void> _updateLastLogin(User user) async {
+    await _firestore.collection('users').doc(user.uid).update({
+      'lastLogin': FieldValue.serverTimestamp(),
+    });
   }
 
-  // Foydalanuvchi profilini yangilash
-  Future<bool> updateProfile(
-      {String? name, String? email, String? phone}) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return false;
-      if (name != null && name.isNotEmpty) {
-        await user.updateDisplayName(name);
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .update({'name': name});
-      }
-      if (email != null && email.isNotEmpty && email != user.email) {
-        await user.updateEmail(email);
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .update({'email': email});
-      }
-      if (phone != null && phone.isNotEmpty) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .update({'phone': phone});
-      }
-      await user.reload();
-      _user = _auth.currentUser;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      _errorMessage = e.toString();
-      notifyListeners();
-      return false;
+  // Auth xatolik xabarlarini tarjima qilish
+  String _getAuthErrorMessage(String errorCode) {
+    switch (errorCode) {
+      case 'user-not-found':
+        return 'Bunday foydalanuvchi topilmadi';
+      case 'wrong-password':
+        return 'Noto\'g\'ri parol';
+      case 'email-already-in-use':
+        return 'Bu email allaqachon ishlatilmoqda';
+      case 'weak-password':
+        return 'Parol juda zaif';
+      case 'invalid-email':
+        return 'Noto\'g\'ri email format';
+      case 'user-disabled':
+        return 'Foydalanuvchi hisobi o\'chirilgan';
+      case 'too-many-requests':
+        return 'Juda ko\'p urinish. Keyinroq qayta urining';
+      case 'operation-not-allowed':
+        return 'Bu operatsiya ruxsat etilmagan';
+      default:
+        return 'Noma\'lum xatolik yuz berdi';
     }
   }
 
-  Future<void> saveFcmTokenToFirestore(String userId) async {
-    final fcmToken = await FirebaseMessaging.instance.getToken();
-    if (fcmToken != null) {
-      await FirebaseFirestore.instance.collection('users').doc(userId).set({
-        'fcmToken': fcmToken,
-      }, SetOptions(merge: true));
-    }
+  void _setLoading(bool loading) {
+    _isLoading = loading;
+    notifyListeners();
+  }
+
+  void _setError(String error) {
+    _errorMessage = error;
+    notifyListeners();
+  }
+
+  void _clearError() {
+    _errorMessage = null;
+    notifyListeners();
   }
 }
 

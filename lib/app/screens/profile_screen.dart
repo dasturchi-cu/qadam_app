@@ -40,18 +40,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() { _isLoading = true; _error = null; });
-    final authService = Provider.of<AuthService>(context, listen: false);
-    final success = await authService.updateProfile(
-      name: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      phone: _phoneController.text.trim(),
-    );
-    setState(() { _isLoading = false; _isEditing = false; _error = success ? null : authService.errorMessage; });
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profil yangilandi!')));
-    }
+    // if (!_formKey.currentState!.validate()) return;
+    // setState(() { _isLoading = true; _error = null; });
+    // final authService = Provider.of<AuthService>(context, listen: false);
+    // final success = await authService.updateProfile(
+    //   name: _nameController.text.trim(),
+    //   email: _emailController.text.trim(),
+    //   phone: _phoneController.text.trim(),
+    // );
+    // setState(() { _isLoading = false; _isEditing = false; _error = success ? null : authService.errorMessage; });
+    // if (success) {
+    //   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profil yangilandi!')));
+    // }
   }
 
   @override
@@ -77,34 +77,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         CircleAvatar(
                           radius: 45,
                           backgroundColor: Colors.grey[200],
-                          backgroundImage: user.photoURL != null ? NetworkImage(user.photoURL!) : null,
-                          child: user.photoURL == null ? const Icon(Icons.person, size: 45, color: Colors.grey) : null,
+                          backgroundImage: user.photoURL != null
+                              ? NetworkImage(user.photoURL!)
+                              : null,
+                          child: user.photoURL == null
+                              ? const Icon(Icons.person,
+                                  size: 45, color: Colors.grey)
+                              : null,
                         ),
                         const SizedBox(height: 20),
                         TextFormField(
                           controller: _nameController,
                           enabled: _isEditing,
                           decoration: const InputDecoration(labelText: 'Ism'),
-                          validator: (v) => v == null || v.isEmpty ? 'Ism kiriting' : null,
+                          validator: (v) =>
+                              v == null || v.isEmpty ? 'Ism kiriting' : null,
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _emailController,
                           enabled: _isEditing,
                           decoration: const InputDecoration(labelText: 'Email'),
-                          validator: (v) => v == null || v.isEmpty ? 'Email kiriting' : null,
+                          validator: (v) =>
+                              v == null || v.isEmpty ? 'Email kiriting' : null,
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _phoneController,
                           enabled: _isEditing,
-                          decoration: const InputDecoration(labelText: 'Telefon raqam'),
+                          decoration:
+                              const InputDecoration(labelText: 'Telefon raqam'),
                         ),
                         const SizedBox(height: 24),
                         if (_error != null)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 12),
-                            child: Text(_error!, style: const TextStyle(color: Colors.red)),
+                            child: Text(_error!,
+                                style: const TextStyle(color: Colors.red)),
                           ),
                         _isEditing
                             ? Row(
@@ -113,7 +122,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   ElevatedButton(
                                     onPressed: _isLoading ? null : _saveProfile,
                                     child: _isLoading
-                                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2))
                                         : const Text('Saqlash'),
                                   ),
                                   const SizedBox(width: 16),
@@ -123,8 +136,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         : () {
                                             setState(() {
                                               _isEditing = false;
-                                              _nameController.text = user.displayName ?? '';
-                                              _emailController.text = user.email ?? '';
+                                              _nameController.text =
+                                                  user.displayName ?? '';
+                                              _emailController.text =
+                                                  user.email ?? '';
                                               _phoneController.text = '';
                                             });
                                           },
@@ -134,7 +149,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               )
                             : ElevatedButton(
                                 onPressed: () {
-                                  setState(() { _isEditing = true; });
+                                  setState(() {
+                                    _isEditing = true;
+                                  });
                                 },
                                 child: const Text('Tahrirlash'),
                               ),
@@ -144,30 +161,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 32),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('Yutuqlar', style: Theme.of(context).textTheme.displayMedium?.copyWith(fontSize: 18)),
+                    child: Text('Yutuqlar',
+                        style: Theme.of(context)
+                            .textTheme
+                            .displayMedium
+                            ?.copyWith(fontSize: 18)),
                   ),
                   const SizedBox(height: 12),
-                  Consumer<CoinService>(
-                    builder: (context, coinService, _) {
-                      if (coinService.achievements.isEmpty) {
-                        return const Text('Hali yutuqlar yo‘q');
-                      }
-                      return ListView.separated(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: coinService.achievements.length,
-                        separatorBuilder: (_, __) => const Divider(),
-                        itemBuilder: (context, index) {
-                          final ach = coinService.achievements[index];
-                          return ListTile(
-                            leading: const Icon(Icons.emoji_events, color: Colors.amber),
-                            title: Text(ach.challengeTitle),
-                            subtitle: Text('Mukofot: +${ach.reward} tanga\n${DateFormat('yyyy-MM-dd').format(ach.date)}'),
-                          );
-                        },
-                      );
-                    },
-                  ),
+                  // Consumer<CoinService>(
+                  //   builder: (context, coinService, _) {
+                  //     if (coinService.achievements.isEmpty) {
+                  //       return const Text('Hali yutuqlar yo‘q');
+                  //     }
+                  //     return ListView.separated(
+                  //       shrinkWrap: true,
+                  //       physics: const NeverScrollableScrollPhysics(),
+                  //       itemCount: coinService.achievements.length,
+                  //       separatorBuilder: (_, __) => const Divider(),
+                  //       itemBuilder: (context, index) {
+                  //         final ach = coinService.achievements[index];
+                  //         return ListTile(
+                  //           leading: const Icon(Icons.emoji_events, color: Colors.amber),
+                  //           title: Text(ach.challengeTitle),
+                  //           subtitle: Text('Mukofot: +${ach.reward} tanga\n${DateFormat('yyyy-MM-dd').format(ach.date)}'),
+                  //         );
+                  //       },
+                  //     );
+                  //   },
+                  // ),
                 ],
               ),
             ),
@@ -208,14 +229,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
               radius: 28,
             ),
             const SizedBox(height: 8),
-            Text(ach.title, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text(ach.title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 4),
-            Text(ach.description, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+            Text(ach.description,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 12, color: Colors.grey)),
             const SizedBox(height: 4),
-            Text('${ach.date.day}.${ach.date.month}.${ach.date.year}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            Text('${ach.date.day}.${ach.date.month}.${ach.date.year}',
+                style: const TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
       ),
     );
   }
-} 
+}

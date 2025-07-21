@@ -516,7 +516,7 @@ class _LoginStreakScreenState extends State<LoginStreakScreen>
                                   }, SetOptions(merge: true));
                                   await Provider.of<CoinService>(context,
                                           listen: false)
-                                      .addCoins(reward);
+                                      .addCoins(reward, 'login_streak');
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Row(

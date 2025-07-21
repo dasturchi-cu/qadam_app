@@ -74,7 +74,7 @@ class _CoinWalletScreenState extends State<CoinWalletScreen> {
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        '${coinService.coins}',
+                        '${coinService.totalCoins}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 40,
@@ -136,7 +136,7 @@ class _CoinWalletScreenState extends State<CoinWalletScreen> {
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => const TransactionHistoryScreen(),
+                          builder: (_) => TransactionHistoryScreen(),
                         ),
                       );
                     },
@@ -230,10 +230,10 @@ class _CoinWalletScreenState extends State<CoinWalletScreen> {
                   const SizedBox(height: 15),
                   _buildInfoRow(
                       'Bugun yig\'ilgan', '${coinService.todayEarned} tanga'),
-                  _buildInfoRow(
-                      'Kunlik limit', '${coinService.dailyCoinLimit} tanga'),
+                  _buildInfoRow('Kunlik limit',
+                      '${coinService.remainingDailyLimit} tanga'),
                   _buildInfoRow('Qadam/tanga nisbati',
-                      '${coinService.stepsPerCoin} qadam = 1 tanga'),
+                      '${coinService.remainingDailyLimit} qadam = 1 tanga'),
                   _buildInfoRow('Tanga qiymati', '1 tanga ≈ 10 so\'m'),
                 ],
               ),
@@ -338,7 +338,7 @@ class _CoinWalletScreenState extends State<CoinWalletScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Joriy balans: ${coinService.coins} tanga'),
+            Text('Joriy balans: ${coinService.todayEarned} tanga'),
             const SizedBox(height: 15),
             TextField(
               controller: _amountController,
@@ -374,9 +374,9 @@ class _CoinWalletScreenState extends State<CoinWalletScreen> {
               final amount = int.tryParse(_amountController.text);
               if (amount != null &&
                   amount >= 1000 &&
-                  amount <= coinService.coins) {
+                  amount <= coinService.todayEarned) {
                 // Process withdrawal
-                coinService.withdrawCoins(amount);
+                // coinService.withdrawCoins(amount);
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
@@ -433,7 +433,7 @@ class _CoinWalletScreenState extends State<CoinWalletScreen> {
     );
     _rewardedAd!.show(
       onUserEarnedReward: (ad, reward) async {
-        await coinService.addCoins(15);
+        await coinService.addCoins(15, 'rewarded_ad');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Tabriklaymiz! +15 tanga oldingiz!')),
         );

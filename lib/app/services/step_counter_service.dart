@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:pedometer/pedometer.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,19 +7,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class StepCounterService extends ChangeNotifier {
+  StreamSubscription<StepCount>? _stepCountSubscription;
+  StreamSubscription<DocumentSnapshot>? _firestoreSubscription;
+  Timer? _syncTimer;
   int _steps = 0;
-  int _dailyGoal = 10000;
-  DateTime? _lastResetDate;
-  String _status = 'stopped';
+  String _status = 'unknown';
   Stream<StepCount>? _stepCountStream;
   late SharedPreferences _prefs;
+
+  int _dailyGoal = 10000;
+  DateTime? _lastResetDate;
 
   StepCounterService() {
     _initPrefs();
   }
 
   int get steps => _steps;
-  int get dailyGoal => _dailyGoal;
+  int get dailyGoal => _prefs.getInt('dailyGoal') ?? 10000;
   String get status => _status;
 
   Future<void> _initPrefs() async {
@@ -89,15 +95,21 @@ class StepCounterService extends ChangeNotifier {
   }
 
   void _setupPedometer() {
+    _stepCountSubscription?.cancel();
     _stepCountStream = Pedometer.stepCountStream;
-    _stepCountStream?.listen(_onStepCount).onError(_onStepCountError);
+    _stepCountSubscription = _stepCountStream?.listen(_onStepCount);
   }
 
   void _onStepCount(StepCount event) async {
+    final previousSteps = _steps;
     _steps = event.steps;
-    _saveSteps();
-    syncStepsWithFirestore();
-    await _updateAllChallengeProgress();
+
+    // Faqat qadamlar oshganda saqlash
+    if (_steps > previousSteps) {
+      await _saveSteps();
+      _scheduleSyncWithFirestore();
+    }
+
     notifyListeners();
   }
 
@@ -123,31 +135,38 @@ class StepCounterService extends ChangeNotifier {
 
   // Sinxronizatsiya: lokal qadamlarni Firestore bilan bir xil qilish
   Future<void> syncStepsWithFirestore() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    final userDoc =
-        FirebaseFirestore.instance.collection('users').doc(user.uid);
-    final statsDoc = userDoc
-        .collection('stats')
-        .doc(DateTime.now().toIso8601String().substring(0, 10));
-    // Firestore'dan mavjud qadamlarni olish
-    final snapshot = await statsDoc.get();
-    int firestoreSteps = 0;
-    if (snapshot.exists) {
-      firestoreSteps = snapshot.data()?['steps'] ?? 0;
-    }
-    // Agar lokal qadamlar ko'proq bo'lsa, Firestore'ga yozamiz
-    if (_steps > firestoreSteps) {
-      await statsDoc.set({
-        'day': DateTime.now().weekday,
-        'steps': _steps,
-        'coins': 0, // coins logikasi CoinService'da
-        'date': DateTime.now(),
-      }, SetOptions(merge: true));
-    } else if (firestoreSteps > _steps) {
-      // Agar Firestore ko'proq bo'lsa, lokalga yozamiz
-      _steps = firestoreSteps;
-      await _saveSteps();
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw Exception('User not authenticated');
+      final userDoc =
+          FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final statsDoc = userDoc
+          .collection('stats')
+          .doc(DateTime.now().toIso8601String().substring(0, 10));
+      // Firestore'dan mavjud qadamlarni olish
+      final snapshot = await statsDoc.get();
+      int firestoreSteps = 0;
+      if (snapshot.exists) {
+        firestoreSteps = snapshot.data()?['steps'] ?? 0;
+      }
+      // Agar lokal qadamlar ko'proq bo'lsa, Firestore'ga yozamiz
+      if (_steps > firestoreSteps) {
+        await statsDoc.set({
+          'day': DateTime.now().weekday,
+          'steps': _steps,
+          'coins': 0, // coins logikasi CoinService'da
+          'date': DateTime.now(),
+        }, SetOptions(merge: true));
+      } else if (firestoreSteps > _steps) {
+        // Agar Firestore ko'proq bo'lsa, lokalga yozamiz
+        _steps = firestoreSteps;
+        await _saveSteps();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Sync error: $e');
+      // Error reporting service'ga yuborish
+      _status = 'sync_error';
       notifyListeners();
     }
   }
@@ -182,5 +201,48 @@ class StepCounterService extends ChangeNotifier {
       return doc.data()?['targetSteps'] ?? 0;
     }
     return 0;
+  }
+
+  // Real-time Firestore listener qo'shish
+  void _setupFirestoreListener() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    _firestoreSubscription = FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .collection('daily_stats')
+        .doc(today)
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.exists) {
+        final data = snapshot.data();
+        final firestoreSteps = data?['steps'] ?? 0;
+
+        // Agar Firestore'dagi qadamlar ko'proq bo'lsa, lokalga yangilash
+        if (firestoreSteps > _steps) {
+          _steps = firestoreSteps;
+          _saveSteps();
+          notifyListeners();
+        }
+      }
+    });
+  }
+
+  // Batch sync - har 30 soniyada
+  void _scheduleSyncWithFirestore() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer(Duration(seconds: 30), () {
+      syncStepsWithFirestore();
+    });
+  }
+
+  @override
+  void dispose() {
+    _stepCountSubscription?.cancel();
+    _firestoreSubscription?.cancel();
+    _syncTimer?.cancel();
+    super.dispose();
   }
 }
