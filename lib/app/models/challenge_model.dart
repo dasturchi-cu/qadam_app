@@ -114,28 +114,15 @@ void updateChallengesProgress(List<ChallengeModel> challenges, int currentSteps,
 }
 
 // Main App Widget
-class MyChallengeScreen extends StatefulWidget {
+class MyChallengeScreen extends StatelessWidget {
   const MyChallengeScreen({super.key});
-
-  @override
-  State<MyChallengeScreen> createState() => _MyChallengeScreenState();
-}
-
-class _MyChallengeScreenState extends State<MyChallengeScreen> {
-  @override
-  void initState() {
-    super.initState();
-    Future.microtask(() => Provider.of<ChallengeService>(context, listen: false)
-        .fetchChallenges());
-  }
 
   @override
   Widget build(BuildContext context) {
     final stepService = Provider.of<step_service.StepCounterService>(context);
     final challengeService = Provider.of<ChallengeService>(context);
-    final challenges = challengeService.challenges;
+    final challenges = challengeService.getChallengesStream();
 
-    // Update progress when UI builds (or ideally when steps change)
     updateChallengesProgress(
       challenges,
       stepService.steps,
@@ -149,6 +136,7 @@ class _MyChallengeScreenState extends State<MyChallengeScreen> {
       body: ListView.builder(
         itemCount: challenges.length,
         itemBuilder: (context, index) {
+
           final challenge = challenges[index];
           return ListTile(
             title: Text(challenge.title),
@@ -172,7 +160,7 @@ void main() {
       providers: [
         ChangeNotifierProvider(
             create: (_) => step_service.StepCounterService()),
-        ChangeNotifierProvider(
+        Provider<ChallengeService>(
           create: (_) => ChallengeService(),
         ),
       ],

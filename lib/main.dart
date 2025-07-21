@@ -57,10 +57,8 @@ void main() async {
         ChangeNotifierProvider(
             create: (_) => step_service.StepCounterService()),
         ChangeNotifierProvider(create: (_) => CoinService()),
-        ChangeNotifierProvider(create: (_) => ChallengeService()),
         ChangeNotifierProvider(create: (_) => RankingService()),
         ChangeNotifierProvider(create: (_) => SettingsService()),
-        ChangeNotifierProvider(create: (_) => TransactionService()),
         ChangeNotifierProvider(create: (_) => ReferralService()),
         ChangeNotifierProvider(create: (_) => StatisticsService()),
         ChangeNotifierProvider(create: (_) => AchievementService()),

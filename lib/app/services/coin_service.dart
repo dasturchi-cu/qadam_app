@@ -218,7 +218,7 @@ class CoinService extends ChangeNotifier {
     if (user == null) return false;
 
     // Firestore'ga so'rov yozish
-    await FirebaseFirestore.instance.collection('withdraw_requests').add({
+    await FirebaseFirestore.instance.collection('image.pngwithdraw_requests').add({
       'userId': user.uid,
       'amount': amount,
       'date': DateTime.now(),
