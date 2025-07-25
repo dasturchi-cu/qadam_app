@@ -224,7 +224,7 @@ class ChallengeService extends ChangeNotifier {
         .where('userId', isEqualTo: user.uid)
         .snapshots()
         .listen((snapshot) {
-      _activeChallenges.clear();
+      _activeChallenges.clear();nz
       _completedChallenges.clear();
 
       for (var doc in snapshot.docs) {
